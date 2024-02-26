@@ -74,6 +74,19 @@ class MyStack(TerraformStack):
                                                       subnet_id=public_subnet.id,
                                                       route_table_id=public_route_table.id
                                                       )
+        
+        private_route_table = RouteTable(self, 'PrivateRouteTableAssociation',
+                                         vpc_id=my_vpc.id,
+
+                                         tags={"Name": "PrivateRt"}
+                                         )
+        
+        RouteTableAssociation(self, 'PrivateRouteAssociation',
+                              subnet_id=private_subnet.id,
+                              route_table_id=private_subnet.id
+                              )
+        
+
 
 
 app = App()
