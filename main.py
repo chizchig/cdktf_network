@@ -7,6 +7,8 @@ from imports.aws.vpc import Vpc
 from imports.aws.subnet import Subnet
 from imports.aws.internet_gateway import InternetGateway
 from imports.aws.route_table import RouteTable, RouteTableRoute
+from imports.aws.security_group import SecurityGroup
+from imports.aws.security_group_rule import SecurityGroupRule
 
 
 class MyStack(TerraformStack):
@@ -35,7 +37,7 @@ class MyStack(TerraformStack):
                                vpc_id=my_vpc.id,
                                tags={"Name": "Public_Subnet"}
                                )
-
+        
         private_subnet = Subnet(self, 'PrivateSubnet',
                                 cidr_block="10.0.5.0/24",
                                 availability_zone="us-east-1b",
@@ -75,6 +77,8 @@ class MyStack(TerraformStack):
                                                       route_table_id=public_route_table.id
                                                       )
         
+         # Add Nat Gateway
+        
         private_route_table = RouteTable(self, 'PrivateRouteTableAssociation',
                                          vpc_id=my_vpc.id,
 
@@ -96,6 +100,43 @@ class MyStack(TerraformStack):
                               route_table_id=db_route_table.id
                               )
         
+        # Security Group
+
+        security_group = SecurityGroup(self, "SG",
+                                      name   =   "vpc-sg",
+                                      vpc_id = my_vpc.id,
+
+                                      tags={
+                                          "Name" : "vpc-sg"
+                                      }
+                      
+                                       )
+        SecurityGroupRule(self, "SGR_SSH", 
+                          security_group_id = security_group.id,
+                          type        = "ingress",
+                          cidr_blocks = ["10.0.5.0/24"],
+                          from_port   = 22,
+                          to_port     = 22,
+                          protocol    = "tcp"
+                          )
+        
+        SecurityGroupRule(self, "SGR_HTTP", 
+                          security_group_id = security_group.id,
+                          type        = "ingress",
+                          cidr_blocks = ["10.0.3.0/24"],
+                          from_port   = 80,
+                          to_port     = 80,
+                          protocol = "tcp"
+                          )
+        
+        SecurityGroupRule(self, "SGR_MYSQL", 
+                          security_group_id = security_group.id,
+                          type        = "ingress",
+                          cidr_blocks = ["10.0.1.0/24"],
+                          from_port   = 3306,
+                          to_port     = 3306,
+                          protocol = "tcp"
+                          )
 
         
 
