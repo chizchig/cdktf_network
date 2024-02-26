@@ -54,9 +54,26 @@ class MyStack(TerraformStack):
 
         public_route_table = RouteTable(self, 'PublicRouteTable',
                                         vpc_id=my_vpc.id,
-                                        tags={"Name": "Public_Route_Table"}
+                                        tags={"Name": "PRT"}
                                         )
 
+        RouteTable(self, "PublicRoute",
+                    route=[
+                        RouteTableRoute(
+                            cidr_block="0.0.0.0/0",  # Assuming this is your default route
+                            gateway_id=internet_gateway.id
+                        )
+                    ],
+                    tags={
+                        "Name": "PublicRoute"
+                    },
+                    vpc_id=my_vpc.id
+                    )
+
+        routetableassociation = RouteTableAssociation(self, 'PublicRouteTableAssociation',
+                                                      subnet_id=public_subnet.id,
+                                                      route_table_id=public_route_table.id
+                                                      )
 
 
 app = App()
