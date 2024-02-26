@@ -86,6 +86,20 @@ class MyStack(TerraformStack):
                               route_table_id=private_subnet.id
                               )
         
+        db_route_table = RouteTable(self, 'DbRouteTable',
+                                    vpc_id=my_vpc.id,
+                                    tags={"Name": "Database_Route_Table"}
+                                    )
+        
+        RouteTableAssociation(self, 'DbRouteAssociation',
+                              subnet_id=db_subnet.id,
+                              route_table_id=db_route_table.id
+                              )
+        
+
+        
+
+        
 
 
 
