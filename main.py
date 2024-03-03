@@ -1,8 +1,16 @@
 #!/usr/bin/env python
 from constructs import Construct
-from cdktf import App, TerraformStack
+from cdktf import App, Fn, TerraformOutput, TerraformStack, Token
+from imports.aws.data_aws_caller_identity import DataAwsCallerIdentity
+from imports.aws.data_aws_ecr_repository import DataAwsEcrRepositoryImageScanningConfiguration
+from imports.aws.data_aws_iam_policy_document import DataAwsIamPolicyDocument, DataAwsIamPolicyDocumentStatement, DataAwsIamPolicyDocumentStatementPrincipals
+from imports.aws.ecr_repository import EcrRepository, EcrRepositoryImageScanningConfiguration
+from imports.aws.eks_cluster import EksCluster, EksClusterVpcConfig
+from imports.aws.iam_role import IamRole
+from imports.aws.iam_role_policy_attachment import IamRolePolicyAttachment
 from imports.aws.provider import AwsProvider
 from imports.aws.route_table_association import RouteTableAssociation
+from imports.aws.s3_bucket import S3Bucket
 from imports.aws.vpc import Vpc
 from imports.aws.subnet import Subnet
 from imports.aws.internet_gateway import InternetGateway
@@ -14,6 +22,7 @@ from imports.aws.security_group_rule import SecurityGroupRule
 class MyStack(TerraformStack):
     def __init__(self, scope: Construct, id: str):
         super().__init__(scope, id)
+        
 
         AwsProvider(self, 'Aws', region="us-east-1")
 
@@ -87,7 +96,7 @@ class MyStack(TerraformStack):
         
         RouteTableAssociation(self, 'PrivateRouteAssociation',
                       subnet_id=private_subnet.id,
-                      route_table_id=private_route_table.id  # Corrected
+                      route_table_id=private_route_table.id  
                       )
 
         
@@ -138,6 +147,80 @@ class MyStack(TerraformStack):
                           to_port     = 3306,
                           protocol = "tcp"
                           )
+        
+        assume_role = DataAwsIamPolicyDocument(self, "assume_role",
+                                               statement = [DataAwsIamPolicyDocumentStatement(
+                                                   actions = ["sts:AssumeRole"],
+                                                   effect  = "Allow",
+                                                   principals = [DataAwsIamPolicyDocumentStatementPrincipals(
+                                                       identifiers = ["eks.amazonaws.com"],
+                                                       type        = "Service"
+                                                   )
+                                                   ]
+                                               )
+                                               ]
+                                        )
+        
+        eks_role=IamRole(self, "eks_role",
+            assume_role_policy=Token.as_string(
+                Fn.jsonencode({
+                    "Statement": [{
+                        "Action": "sts:AssumeRole",
+                        "Effect": "Allow",
+                        "Principal": {
+                            "Service": "eks.amazonaws.com"
+                        },
+                        "Sid": ""
+                    }
+                    ],
+                    "Version": "2012-10-17"
+                })),
+            name="eks-cluster-role",
+            tags={
+                "Name": "eks_role"
+            }
+        )
+
+        eks_cluster_policy_attachment = IamRolePolicyAttachment(self, "e-AmazonEKSClusterPolicy",
+                                policy_arn="arn:aws:iam::aws:policy/AmazonEKSClusterPolicy",
+                                role=eks_role.name
+)
+
+        eksvpc_resource_controller_attachment = IamRolePolicyAttachment(self, "e-AmazonEKSVPCResourceController",
+                                policy_arn="arn:aws:iam::aws:policy/AmazonEKSVPCResourceController",
+                                role=eks_role.name
+        )
+
+
+        eks_cluster = EksCluster(self, "EksCluster",
+                         name="MyEksCluster",  # Provide a name for your EKS cluster
+                         role_arn=eks_role.arn,
+                         vpc_config=EksClusterVpcConfig(
+                            subnet_ids=[private_subnet.id, public_subnet.id]
+                         )
+)
+
+# Creating an Amazon ECR 
+        
+        amazon_ecr = EcrRepository(self, "AmazonEcr",
+            image_scanning_configuration=EcrRepositoryImageScanningConfiguration(
+                scan_on_push=True
+            ),
+            image_tag_mutability="MUTABLE",
+            name = "platinum_ecr"
+)
+        
+        my_bucket = S3Bucket(self, "MyBucket",
+                              bucket = "unique-hosting",
+
+                              tags = {
+                                  "Name" :"Application Hosting"
+                              }
+                            )
+
+
+        
+        
 
         
 
