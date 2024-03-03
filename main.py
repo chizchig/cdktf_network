@@ -8,9 +8,14 @@ from imports.aws.ecr_repository import EcrRepository, EcrRepositoryImageScanning
 from imports.aws.eks_cluster import EksCluster, EksClusterVpcConfig
 from imports.aws.iam_role import IamRole
 from imports.aws.iam_role_policy_attachment import IamRolePolicyAttachment
+from imports.aws.kms_key import KmsKey
 from imports.aws.provider import AwsProvider
 from imports.aws.route_table_association import RouteTableAssociation
-from imports.aws.s3_bucket import S3Bucket
+from imports.aws.s3_access_point import S3AccessPoint
+from imports.aws.s3_bucket import S3Bucket, S3BucketServerSideEncryptionConfiguration, S3BucketServerSideEncryptionConfigurationRule, S3BucketServerSideEncryptionConfigurationRuleApplyServerSideEncryptionByDefault
+
+from imports.aws.s3_bucket_metric import S3BucketMetric, S3BucketMetricFilter
+from imports.aws.s3_bucket_server_side_encryption_configuration import S3BucketServerSideEncryptionConfigurationA, S3BucketServerSideEncryptionConfigurationRuleA, S3BucketServerSideEncryptionConfigurationRuleApplyServerSideEncryptionByDefaultA
 from imports.aws.vpc import Vpc
 from imports.aws.subnet import Subnet
 from imports.aws.internet_gateway import InternetGateway
@@ -208,23 +213,41 @@ class MyStack(TerraformStack):
             ),
             image_tag_mutability="MUTABLE",
             name = "platinum_ecr"
+            
 )
         
+        my_key = KmsKey(self, "MyKey",
+                        deletion_window_in_days=10,
+                        description="key to encrypt bucket objects")
+       
         my_bucket = S3Bucket(self, "MyBucket",
-                              bucket = "unique-hosting",
+                             bucket="unique-hosting",
+                             server_side_encryption_configuration=S3BucketServerSideEncryptionConfiguration(
+                                 rule=S3BucketServerSideEncryptionConfigurationRule(
+                                     apply_server_side_encryption_by_default=S3BucketServerSideEncryptionConfigurationRuleApplyServerSideEncryptionByDefault(
+                                         kms_master_key_id=my_key.arn,
+                                         sse_algorithm="aws:kms"
+                                     )
+                                 )
+                             ),
+                             tags={
+                                 "Name": "Application Hosting"
+                             })
 
-                              tags = {
-                                  "Name" :"Application Hosting"
-                              }
-                            )
+        s3_access_point = S3AccessPoint(self, "S3AccessPoint",
+                                        bucket=my_bucket.id,
+                                        name="s3-access-point")
 
-
-        
-        
-
-        
-
-        
+        S3BucketMetric(self, "s3-filtered",
+                       bucket=my_bucket.id,
+                       filter=S3BucketMetricFilter(
+                           access_point=s3_access_point.arn,
+                           tags={
+                               "class": "red",
+                               "priority": "high"
+                           }
+                       ),
+                       name="ExtremelyImportantRedDocuments")
 
 
 
