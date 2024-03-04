@@ -4,6 +4,7 @@ from cdktf import App, Fn, TerraformOutput, TerraformStack, Token
 from imports.aws.data_aws_caller_identity import DataAwsCallerIdentity
 from imports.aws.data_aws_ecr_repository import DataAwsEcrRepositoryImageScanningConfiguration
 from imports.aws.data_aws_iam_policy_document import DataAwsIamPolicyDocument, DataAwsIamPolicyDocumentStatement, DataAwsIamPolicyDocumentStatementPrincipals
+from imports.aws.db_instance import DbInstance
 from imports.aws.ecr_repository import EcrRepository, EcrRepositoryImageScanningConfiguration
 from imports.aws.eks_cluster import EksCluster, EksClusterVpcConfig
 from imports.aws.iam_role import IamRole
@@ -24,13 +25,16 @@ from imports.aws.security_group import SecurityGroup
 from imports.aws.security_group_rule import SecurityGroupRule
 
 
+
 class MyStack(TerraformStack):
-    def __init__(self, scope: Construct, id: str):
+    def __init__(self, scope: Construct, id: str, dbname: str, instanceClass: str, password: str, username: str ):
         super().__init__(scope, id)
         
-
+#                                INFRASTRUCTUTRE STACK
+        
         AwsProvider(self, 'Aws', region="us-east-1")
 
+#                                      NETWORK
         my_vpc = Vpc(self, 'MyVpc',
                      cidr_block='10.0.0.0/16',
                      enable_dns_hostnames=True,
@@ -76,7 +80,7 @@ class MyStack(TerraformStack):
         RouteTable(self, "PublicRoute",
                     route=[
                         RouteTableRoute(
-                            cidr_block="0.0.0.0/0",  # Assuming this is your default route
+                            cidr_block="0.0.0.0/0",  
                             gateway_id=internet_gateway.id
                         )
                     ],
@@ -115,7 +119,7 @@ class MyStack(TerraformStack):
                               route_table_id=db_route_table.id
                               )
         
-        # Security Group
+        #                                  SECURITY GROUP
 
         security_group = SecurityGroup(self, "SG",
                                       name   =   "vpc-sg",
@@ -166,6 +170,8 @@ class MyStack(TerraformStack):
                                                ]
                                         )
         
+        #                              EKS IAM
+        
         eks_role=IamRole(self, "eks_role",
             assume_role_policy=Token.as_string(
                 Fn.jsonencode({
@@ -205,7 +211,7 @@ class MyStack(TerraformStack):
                          )
 )
 
-# Creating an Amazon ECR 
+#                                    Creating an Amazon ECR 
         
         amazon_ecr = EcrRepository(self, "AmazonEcr",
             image_scanning_configuration=EcrRepositoryImageScanningConfiguration(
@@ -215,6 +221,8 @@ class MyStack(TerraformStack):
             name = "platinum_ecr"
             
 )
+        
+#                                     STORAGE
         
         my_key = KmsKey(self, "MyKey",
                         deletion_window_in_days=10,
@@ -248,10 +256,14 @@ class MyStack(TerraformStack):
                            }
                        ),
                        name="ExtremelyImportantRedDocuments")
+        
+    #                                 DATABASE
+        
+       
+
 
 
 
 app = App()
 MyStack(app, "cloud84")
-
 app.synth()
