@@ -27,7 +27,7 @@ from imports.aws.security_group_rule import SecurityGroupRule
 
 
 class MyStack(TerraformStack):
-    def __init__(self, scope: Construct, id: str, dbname: str, instanceClass: str, password: str, username: str ):
+    def __init__(self, scope: Construct, id: str):
         super().__init__(scope, id)
         
 #                                INFRASTRUCTUTRE STACK
