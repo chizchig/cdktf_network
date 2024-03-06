@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from constructs import Construct
-from cdktf import App, Fn, TerraformOutput, TerraformStack, Token
+from cdktf import App, Fn, TerraformStack, Token
 from imports.aws.data_aws_caller_identity import DataAwsCallerIdentity
 from imports.aws.data_aws_ecr_repository import DataAwsEcrRepositoryImageScanningConfiguration
 from imports.aws.data_aws_iam_policy_document import DataAwsIamPolicyDocument, DataAwsIamPolicyDocumentStatement, DataAwsIamPolicyDocumentStatementPrincipals
