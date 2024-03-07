@@ -1,6 +1,14 @@
 #!/usr/bin/env python
+import cdktf
 from constructs import Construct
 from cdktf import App, Fn, TerraformStack, Token
+from imports.aws.rds_cluster_instance import RdsClusterInstance
+from imports.aws.rds_cluster_parameter_group import RdsClusterParameterGroup
+from imports.aws.rds_cluster import RdsCluster
+from imports.aws.db_parameter_group import DbParameterGroup, DbParameterGroupParameter
+from imports.aws.cloudwatch_metric_alarm import CloudwatchMetricAlarm
+from imports.aws.sns_topic import SnsTopic
+from imports.aws.db_subnet_group import DbSubnetGroup
 from imports.aws.data_aws_caller_identity import DataAwsCallerIdentity
 from imports.aws.data_aws_ecr_repository import DataAwsEcrRepositoryImageScanningConfiguration
 from imports.aws.data_aws_iam_policy_document import DataAwsIamPolicyDocument, DataAwsIamPolicyDocumentStatement, DataAwsIamPolicyDocumentStatementPrincipals
@@ -27,7 +35,7 @@ from imports.aws.security_group_rule import SecurityGroupRule
 
 
 class MyStack(TerraformStack):
-    def __init__(self, scope: Construct, id: str):
+    def __init__(self, scope: Construct, id: str, dbname: str, instance_class: str, password: str, username: str, master_password: str):
         super().__init__(scope, id)
         
 #------------------------------INFRASTRUCTUTRE STACK---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------#
@@ -229,19 +237,24 @@ class MyStack(TerraformStack):
                         description="key to encrypt bucket objects")
        
         my_bucket = S3Bucket(self, "MyBucket",
-                             bucket="unique-hosting",
-                             server_side_encryption_configuration=S3BucketServerSideEncryptionConfiguration(
-                                 rule=S3BucketServerSideEncryptionConfigurationRule(
-                                     apply_server_side_encryption_by_default=S3BucketServerSideEncryptionConfigurationRuleApplyServerSideEncryptionByDefault(
-                                         kms_master_key_id=my_key.arn,
-                                         sse_algorithm="aws:kms"
-                                     )
-                                 )
-                             ),
-                             tags={
-                                 "Name": "Application Hosting"
-                             })
-
+                     bucket="unique-hosting",
+                     tags={
+                         "Name": "Application Hosting"
+                     })
+        
+        s3_bucket_encryption = S3BucketServerSideEncryptionConfigurationA(
+                                                                        self,
+                                                                        "MyBucketEncryption",
+                                                                        bucket=my_bucket.id,
+                                                                        rule=[
+                                                                            S3BucketServerSideEncryptionConfigurationRuleA(
+                                                                                apply_server_side_encryption_by_default=S3BucketServerSideEncryptionConfigurationRuleApplyServerSideEncryptionByDefaultA(
+                                                                                    kms_master_key_id=my_key.arn,
+                                                                                    sse_algorithm="aws:kms"
+                                                                                )
+                                                                            )
+                                                                        ]
+                                                                    )
         s3_access_point = S3AccessPoint(self, "S3AccessPoint",
                                         bucket=my_bucket.id,
                                         name="s3-access-point")
@@ -258,12 +271,104 @@ class MyStack(TerraformStack):
                        name="ExtremelyImportantRedDocuments")
         
 #--------------------------------------DATABASE--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------#
+        rds_subnet_group = DbSubnetGroup(self, "RdsSubnetGroup",
+                                         name = "rds-subnet-grp",
+                                         subnet_ids = [public_subnet.id, db_subnet.id],
+                                         tags={
+                                             "Name": "RDS Subnet Group"
+                                         }
+                                        )
         
-       
+        aurora_cluster_parameter_group = RdsClusterParameterGroup(self, "AuroraClusterParameterGroup",
+                                                                name="aurora-cluster-parameter-group",
+                                                                family="aurora-mysql8.0",
+                                                                description="Custom parameter group for MySQL 8.0",
+                                                                # parameter=[
+                                                                #     {
+                                                                #         "name": "performance_insight_enabled",
+                                                                #         "value": "1"
+                                                                #     },
 
+                                                                #     {
+                                                                #         "name": "performance_insights_retention_period",
+                                                                #         "value": "7"
+                                                                #     }
+                                                                # ]
+                                                            )  
+
+        aurora_cluster =  RdsCluster(self, "AuroraCluster",
+                                    cluster_identifier      = "aurora-cluster",
+                                    engine                  = "aurora-mysql",
+                                    engine_version          = "8.0.mysql_aurora.3.02.0",
+                                    availability_zones      = ["us-east-1a", "us-east-1c"],
+                                    database_name           = "dbname",
+                                    master_username         = username,
+                                    master_password         = master_password,
+                                    db_cluster_parameter_group_name = aurora_cluster_parameter_group.name,
+                                    db_subnet_group_name = rds_subnet_group.name,
+                                    skip_final_snapshot     = True,
+                                    delete_automated_backups= True,
+                                    deletion_protection     = False
+
+                                                                    )
+        
+        aurora_instance = RdsClusterInstance(self, "AuroraInstance",
+                                            identifier = "aurora-cluster-instance",
+                                            cluster_identifier = aurora_cluster.cluster_identifier,
+                                            instance_class     = "db.r5.large",
+                                            engine             = "aurora-mysql",
+                                            engine_version     = "8.0.mysql_aurora.3.02.0",
+                                            performance_insights_enabled    = True,
+                                            performance_insights_kms_key_id = my_key.arn,
+                                            performance_insights_retention_period=7
+
+                                            ) 
+
+#---------------------------------------CloudWatch-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------#
+        sns_topic = SnsTopic(self, "MySnsTopic",
+                          display_name = " SNS Topic"
+                          )
+        
+        # eks_cpu_alarm = CloudwatchMetricAlarm(self, "EKSCPUAlarm",
+                            #         alarm_name="EKSCPUAlarm",
+                            #         alarm_description="Alarm for EKS CPU utilization exceeding threshold",
+                            #         namespace                         = "AWS/EC2",
+                            #         metric_name                       =  "Eks_Cpu_Metric",
+                            #         threshold                         = 80,
+                            #         evaluation_periods                = 3,
+                            #         period                            = 300, 
+                            #         comparison_operator               = "GreaterThanOrEqualToThreshold",
+                            #         alarm_actions                     = [eks_cluster.arn],
+                            #         datapoints_to_alarm               = 1,
+                            #         treat_missing_data                = "missing",
+                            #         statistic                         = "Average"
+                            # )
+        
+
+        
+        
+        
+
+        rds_storage_alarm = CloudwatchMetricAlarm(self, "RdsStorageAlarm",
+                                                  alarm_name          = "Rds-Storage-Alarm",
+                                                  alarm_description   = "Alarm for RDS storage utilization exceeding threshold",
+                                                  comparison_operator = "GreaterThanOrEqualToThreshold",
+                                                  namespace           = "AWS/RDS",
+                                                  metric_name         = "FreeStorageSpace",
+                                                  evaluation_periods  = 3,
+                                                  threshold           = 800,
+                                                  period              = 3600,
+                                                  statistic           = "Average",
+                                                  alarm_actions       = [sns_topic.arn],
+                                                  datapoints_to_alarm = 1,
+                                                  treat_missing_data  = "missing",
+                                                  depends_on=[aurora_cluster, aurora_instance]
+                    
+                                                  )
+    
 
 
 
 app = App()
-MyStack(app, "cloud84")
+MyStack(app, "cloud84", "mydb", "db.t3.micro", "k33ns!1984:pow3R", "admin", "ValidMasterPassword123")
 app.synth()
